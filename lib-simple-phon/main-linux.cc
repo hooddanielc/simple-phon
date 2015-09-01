@@ -1,56 +1,38 @@
 #include <iostream>
 #include <alsa/asoundlib.h>
+#include <phon.h>
 
-const char *device = "default"; /* playback device */
-snd_output_t *output = NULL;
-unsigned char buffer[16*1024]; /* some random data */
-
-int main(int, char*[]) {
+void phon::list_devices() {
+  snd_ctl_t *handle;
+  snd_ctl_card_info_t *info;
+  snd_ctl_card_info_alloca(&info);
+  int card_idx = 0;
   int err;
-  unsigned int i;
-  snd_pcm_t *handle;
-  snd_pcm_sframes_t frames;
 
-  for (i = 0; i < sizeof(buffer); i++) {
-    buffer[i] = random() & 0xff;
+  if (snd_card_next(&card_idx) < 0) {
+    std::cout << "Error trying to determine next audio card" << std::endl;
   }
 
-  if ((err = snd_pcm_open(&handle, device, SND_PCM_STREAM_PLAYBACK, 0)) < 0) {
-    printf("Playback open error: %s\n", snd_strerror(err));
-    exit(EXIT_FAILURE);
-  }
+  while (card_idx > 0) {
+    std::cout << "=============" << std::endl;
+    std::cout << "= Card #" << card_idx << std::endl;
 
-  if (
-    (
-      err = snd_pcm_set_params(
-        handle,
-        SND_PCM_FORMAT_U8,
-        SND_PCM_ACCESS_RW_INTERLEAVED,
-        1,
-        48000,
-        1,
-        500000
-      )
-    ) < 0
-  ) {   /* 0.5sec */
-    printf("Playback open error: %s\n", snd_strerror(err));
-    exit(EXIT_FAILURE);
-  }
+    char name[32];
+    sprintf(name, "hw:%d", card_idx);
 
-  for (i = 0; i < 16; i++) {
-    frames = snd_pcm_writei(handle, buffer, sizeof(buffer));
-
-    if (frames < 0) {
-      frames = snd_pcm_recover(handle, frames, 0);
-      printf("snd_pcm_writei failed: %s\n", snd_strerror(err));
-      break;
+    if ((err = snd_ctl_open(&handle, name, 0)) < 0) {
+      std::cout << snd_strerror(err) << std::endl;
+    } else if ((err = snd_ctl_card_info(handle, info)) < 0) {
+      std::cout << snd_strerror(err) << std::endl;
+    } else {
+      std::cout << "  * Found Card " << name << std::endl; 
     }
 
-    if (frames > 0 && frames < (long)sizeof(buffer)) {
-      printf("Short write (expected %li, wrote %li)\n", (long)sizeof(buffer), frames);
-    }
+    snd_card_next(&card_idx);
   }
+}
 
-  snd_pcm_close(handle);
+int main (int, char*[]) {
+  phon::list_devices();
   return 0;
 }
